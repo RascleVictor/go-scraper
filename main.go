@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +23,13 @@ func main() {
 
 	startURL := os.Args[1]
 
+	// Extraire le domaine du site de départ
+	parsedURL, err := url.Parse(startURL)
+	if err != nil {
+		log.Fatal("URL invalide :", err)
+	}
+	baseDomain := parsedURL.Host
+
 	maxDepth := flag.Int("depth", 2, "Profondeur maximale du scraping")
 	asyncMode := flag.Bool("async", true, "Activer le mode asynchrone (true/false)")
 	outputFile := flag.String("output", "", "Fichier CSV de sortie (ex: results.csv)")
@@ -29,6 +38,7 @@ func main() {
 
 	c := colly.NewCollector(
 		colly.MaxDepth(*maxDepth),
+		colly.AllowedDomains(baseDomain), // Ne suivre que ce domaine
 	)
 
 	c.Async = *asyncMode
@@ -39,7 +49,6 @@ func main() {
 	var writer *csv.Writer
 
 	if *outputFile != "" {
-		var err error
 		csvFile, err = os.Create(*outputFile)
 		if err != nil {
 			log.Fatal("Erreur lors de la création du fichier :", err)
@@ -70,6 +79,10 @@ func main() {
 		link := e.Attr("href")
 		absoluteURL := e.Request.AbsoluteURL(link)
 
+		if !strings.Contains(absoluteURL, baseDomain) {
+			return
+		}
+
 		if _, exists := visited.Load(absoluteURL); exists {
 			return
 		}
@@ -88,7 +101,7 @@ func main() {
 	})
 
 	fmt.Println("Exploration de :", startURL)
-	err := c.Visit(startURL)
+	err = c.Visit(startURL)
 	if err != nil {
 		log.Fatal(err)
 	}
